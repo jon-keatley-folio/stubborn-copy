@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::str::FromStr;
 use std::{fs, env};
 use std::path::PathBuf;
@@ -27,6 +28,8 @@ impl Meta {
 
 fn copy_file(src:&PathBuf, dst:&PathBuf) -> bool
 {
+    println!("SRC: {}",src.display());
+    println!("DST: {}",dst.display());
     let delays = vec![100,200,500,1000,500,100,200]; //different wait times to try
     for delay in delays
     {
@@ -37,6 +40,7 @@ fn copy_file(src:&PathBuf, dst:&PathBuf) -> bool
         }
         else
         {
+            println!("zZz");
             sleep(Duration::from_millis(delay));
         }
     }
@@ -44,9 +48,31 @@ fn copy_file(src:&PathBuf, dst:&PathBuf) -> bool
     false
 }
 
+fn get_path_diff(a:&PathBuf,b:&PathBuf) -> Vec<OsString>
+{
+    let mut count:usize = 0;
+    let mut test = b.clone();
+    while &test != a
+    {
+        if test.pop()
+        {
+            count += 1;
+        }
+        else
+        {
+            return Vec::new()
+        }
+    }
+    
+    
+    let bits:Vec<OsString> = b.iter().map(|c| OsString::from(c)).collect();
+    let range:Vec<OsString> = bits[bits.len() - count .. bits.len()].iter().map(|b|b.clone()).collect();
+    range
+    
+}
+
 fn stubborn_copy(src:PathBuf, dst:PathBuf) -> Result<Meta, String>
 {
-    //let dir_result = fs::read_dir("/run/user/1000/gvfs/gphoto2:host=Apple_Inc._iPhone_00008101000A1D3A2145001E");
     let mut meta = Meta::new();
     let mut dirs_to_process:Vec<(PathBuf,ReadDir)> = Vec::new();
     let dir_result = fs::read_dir(&src);
@@ -62,16 +88,29 @@ fn stubborn_copy(src:PathBuf, dst:PathBuf) -> Result<Meta, String>
         
     while let Some((csrc,dir)) = dirs_to_process.pop()
     {
-        
+        println!("Copying {}",csrc.display());
         let cdst:PathBuf = if csrc != src
         {
             //need to create a new dst
-            dst.clone()
+            let new_dirs = get_path_diff(&src,&csrc);
+            let mut ndst = dst.clone();
+            ndst.extend(new_dirs.iter());
+            ndst
         }
         else
         {
             dst.clone()
         };
+        
+        if !cdst.exists()
+        {
+            let mkdirs = fs::create_dir_all(&cdst);
+            if mkdirs.is_err()
+            {
+                meta.dirs_failed += 1;
+                continue;
+            }
+        }
         
         
         for entry_result in dir
@@ -162,6 +201,38 @@ fn main()
     {
         println!("Unable to handle src! {}", &args[0]);
     }
-    
+}
 
+#[cfg(test)]
+mod test
+{
+    use super::*;
+    use std::path::PathBuf;
+
+    
+    #[test]
+    fn test_path_dif()
+    {
+        let path_a = PathBuf::from(r"/this/dir/");
+        
+        let path_b = PathBuf::from(r"/this/dir/another");
+        
+        let path_c = PathBuf::from(r"/this/dir/another/but/i/think/we/good");
+        
+        let no_match = PathBuf::from(r"/not/related");
+        
+        let mut test = get_path_diff(&path_a,&path_b);
+        
+        assert_eq!(test.len(),1);
+        assert_eq!(test[0], OsString::from_str("another").unwrap());
+        
+        test = get_path_diff(&path_a,&path_c);
+        
+        assert_eq!(test.len(),6);
+        assert_eq!(test[0], OsString::from_str("another").unwrap());
+        assert_eq!(test[5], OsString::from_str("good").unwrap());
+        
+        test = get_path_diff(&path_a,&no_match);
+        assert_eq!(test.len(),0);
+    }
 }
