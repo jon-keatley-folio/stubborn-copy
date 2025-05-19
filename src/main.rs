@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::fs::ReadDir;
 use std::thread::sleep;
 use std::time::Duration;
+use std::process::Command;
 
 struct Meta
 {
@@ -29,11 +30,12 @@ impl Meta {
 fn copy_file(src:&PathBuf, dst:&PathBuf) -> bool
 {
     println!("SRC: {}",src.display());
-    println!("DST: {}",dst.display());
     let delays = vec![100,200,500,1000,500,100,200]; //different wait times to try
     for delay in delays
     {
-        let result = fs::copy(src, dst);
+        let result = Command::new("cp")
+        .args([&src,&dst])
+        .output();
         if result.is_ok()
         {
             return true
@@ -101,6 +103,8 @@ fn stubborn_copy(src:PathBuf, dst:PathBuf) -> Result<Meta, String>
         {
             dst.clone()
         };
+        
+        println!("Target: {}",cdst.display());
         
         if !cdst.exists()
         {
